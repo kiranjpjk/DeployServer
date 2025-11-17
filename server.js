@@ -1,36 +1,86 @@
-import WebSocket, { WebSocketServer } from "ws";
+const express = require("express");
+const http = require("http");
+const cors = require("cors");
+const { Server } = require("socket.io");
 
-const wss = new WebSocketServer({ port: process.env.PORT || 8080 });
+const app = express();
+app.use(cors());
+app.get("/", (req, res) => {
+    res.send("STAR-C2 WebSocket Server Running");
+});
 
-const rooms = {}; // roomName -> Set of sockets
+const server = http.createServer(app);
 
-wss.on("connection", (ws, req) => {
-    const params = new URLSearchParams(req.url.replace("/", ""));
-    const room = params.get("room");
-
-    if (!room) {
-        ws.send("Error: room not provided");
-        ws.close();
-        return;
+// SOCKET SERVER
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
     }
+});
 
-    if (!rooms[room]) rooms[room] = new Set();
-    rooms[room].add(ws);
+// ROOM → USERS MAP
+let rooms = {};
+// Example structure:
+// rooms = {
+//   "alpha": ["User101", "User202"]
+// };
 
-    console.log("User joined room:", room);
+io.on("connection", (socket) => {
+    console.log("New user connected:", socket.id);
 
-    ws.on("message", (msg) => {
-        for (const client of rooms[room]) {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(msg.toString());
-            }
-        }
+    let currentRoom = "";
+    let username = "User" + Math.floor(Math.random() * 10000);
+
+    // CREATE ROOM
+    socket.on("create_room", (roomCode) => {
+        if (!rooms[roomCode]) rooms[roomCode] = [];
+
+        currentRoom = roomCode;
+        rooms[currentRoom].push(username);
+
+        socket.join(currentRoom);
+        io.to(currentRoom).emit("users", rooms[currentRoom]);
+
+        console.log(`Room created: ${currentRoom}`);
     });
 
-    ws.on("close", () => {
-        rooms[room].delete(ws);
-        console.log("User disconnected from room:", room);
+    // JOIN ROOM
+    socket.on("join_room", (roomCode) => {
+        if (!rooms[roomCode]) rooms[roomCode] = [];
+
+        currentRoom = roomCode;
+        rooms[currentRoom].push(username);
+
+        socket.join(currentRoom);
+        io.to(currentRoom).emit("users", rooms[currentRoom]);
+
+        console.log(`User joined room: ${currentRoom}`);
+    });
+
+    // CHAT MESSAGE
+    socket.on("chat_message", (data) => {
+        io.to(data.room).emit("chat_message", {
+            user: data.user,
+            message: data.message
+        });
+    });
+
+    // DISCONNECT
+    socket.on("disconnect", () => {
+        console.log("User disconnected:", socket.id);
+
+        if (currentRoom && rooms[currentRoom]) {
+            rooms[currentRoom] = rooms[currentRoom].filter(
+                (u) => u !== username
+            );
+
+            io.to(currentRoom).emit("users", rooms[currentRoom]);
+        }
     });
 });
 
-console.log("WebSocket server running...");
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`STAR-C2 Server running on port ${PORT}`);
+});
