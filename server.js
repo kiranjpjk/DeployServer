@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 
 const app = express();
 app.use(cors());
+
 app.get("/", (req, res) => {
     res.send("STAR-C2 WebSocket Server Running");
 });
@@ -14,20 +15,18 @@ const server = http.createServer(app);
 // SOCKET SERVER
 const io = new Server(server, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+        origin: ["https://server-front1-ten.vercel.app"],
+        methods: ["GET", "POST"],
+    },
+    transports: ["websocket"],          // force websocket only
+    path: "/socket.io/"                 // fix for Railway hosting
 });
 
 // ROOM → USERS MAP
 let rooms = {};
-// Example structure:
-// rooms = {
-//   "alpha": ["User101", "User202"]
-// };
 
 io.on("connection", (socket) => {
-    console.log("New user connected:", socket.id);
+    console.log("User connected:", socket.id);
 
     let currentRoom = "";
     let username = "User" + Math.floor(Math.random() * 10000);
@@ -40,8 +39,8 @@ io.on("connection", (socket) => {
         rooms[currentRoom].push(username);
 
         socket.join(currentRoom);
-        io.to(currentRoom).emit("users", rooms[currentRoom]);
 
+        io.to(currentRoom).emit("users", rooms[currentRoom]);
         console.log(`Room created: ${currentRoom}`);
     });
 
@@ -53,8 +52,8 @@ io.on("connection", (socket) => {
         rooms[currentRoom].push(username);
 
         socket.join(currentRoom);
-        io.to(currentRoom).emit("users", rooms[currentRoom]);
 
+        io.to(currentRoom).emit("users", rooms[currentRoom]);
         console.log(`User joined room: ${currentRoom}`);
     });
 
@@ -71,10 +70,7 @@ io.on("connection", (socket) => {
         console.log("User disconnected:", socket.id);
 
         if (currentRoom && rooms[currentRoom]) {
-            rooms[currentRoom] = rooms[currentRoom].filter(
-                (u) => u !== username
-            );
-
+            rooms[currentRoom] = rooms[currentRoom].filter(u => u !== username);
             io.to(currentRoom).emit("users", rooms[currentRoom]);
         }
     });
